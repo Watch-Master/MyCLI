@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Student Data Generator</title>
+    <!-- Load Tailwind CSS for modern styling and responsiveness -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .data-card {
+            box-shadow: 0 5px 15px -3px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.03);
+        }
+        .scroll-container {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        /* Style for fixed header when scrolling */
+        .sticky-col {
+            position: sticky;
+            left: 0;
+            background-color: white;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+
+    <div class="container mx-auto max-w-7xl">
+        <header class="text-center py-6 bg-white rounded-xl shadow-lg mb-8 data-card">
+            <h1 class="text-3xl font-extrabold text-teal-700">Student Data CSV Creator</h1>
+            <p class="text-md text-gray-600 mt-2">Generate records compatible with your Python Student Data Manager.</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- 1. Data Entry Form -->
+            <div class="lg:col-span-1 data-card bg-white p-6 rounded-xl">
+                <h2 class="text-xl font-semibold mb-4 text-teal-600 border-b pb-2">Add New Record</h2>
+                <form id="studentForm" onsubmit="event.preventDefault(); addStudent();">
+                    <!-- Basic Info -->
+                    <div class="mb-4">
+                        <label class="block text-gray-700 font-medium mb-1" for="name">Name</label>
+                        <input type="text" id="name" required class="w-full p-2 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500" value="New Student">
+                    </div>
+                    <div class="flex space-x-4 mb-4">
+                        <div class="w-1/2">
+                            <label class="block text-gray-700 font-medium mb-1" for="grade">Grade</label>
+                            <input type="number" id="grade" required class="w-full p-2 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500" min="1" max="12" value="9">
+                        </div>
+                        <div class="w-1/2">
+                            <label class="block text-gray-700 font-medium mb-1" for="section">Section</label>
+                            <input type="text" id="section" required class="w-full p-2 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500" maxlength="3" value="B">
+                        </div>
+                    </div>
+
+                    <!-- Marks Entry -->
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div class="p-3 bg-teal-50 rounded-lg">
+                            <h3 class="font-bold text-teal-600 mb-2 text-sm">Term 1 Marks (0-100)</h3>
+                            <div id="term1-inputs" class="space-y-2">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                        <div class="p-3 bg-teal-50 rounded-lg">
+                            <h3 class="font-bold text-teal-600 mb-2 text-sm">Term 2 Marks (0-100)</h3>
+                            <div id="term2-inputs" class="space-y-2">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" id="addBtn" class="w-full bg-teal-600 text-white font-bold py-2 rounded-lg hover:bg-teal-700 transition duration-200">
+                        Add Student to List
+                    </button>
+                    <p id="message" class="mt-3 text-center text-sm font-medium"></p>
+                </form>
+            </div>
+
+            <!-- 2. Record List and Export -->
+            <div class="lg:col-span-2 data-card bg-white p-6 rounded-xl">
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h2 class="text-xl font-semibold text-gray-700">Records to be Exported (<span id="recordCount">0</span>)</h2>
+                    <button onclick="generateCsv()" id="exportBtn" disabled class="flex items-center bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Download CSV
+                    </button>
+                </div>
+                
+                <!-- Student List Table -->
+                <div class="scroll-container border border-gray-200 rounded-lg">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr id="table-header">
+                                <!-- Populated by JS -->
+                            </tr>
+                        </thead>
+                        <tbody id="studentTableBody" class="bg-white divide-y divide-gray-200">
+                            <tr><td colspan="15" class="p-4 text-center text-gray-500">No records added yet.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="mt-4 text-xs text-gray-500 text-center">
+                    Note: The column headers in the generated CSV (e.g., `t1_math`) exactly match the schema of your Python script.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Constants must match the Python script's SUBJECTS and naming convention
+        const SUBJECTS = ["Math", "Science", "English", "History", "Art"]; 
+        const studentRecords = [];
+
+        /**
+         * Converts a human-readable subject name (e.g., "Math") into the sanitized database column name (e.g., "math").
+         * This ensures generated headers match the Python script's logic.
+         */
+        function sanitizeSubjectName(subject) {
+            // Replaces non-alphanumeric characters with nothing, then converts to lowercase
+            return subject.toLowerCase().replace(/[^\w]/g, '');
+        }
+
+        /**
+         * Sets up the subject mark inputs in the form dynamically.
+         */
+        function setupFormAndTable() {
+            const term1Inputs = document.getElementById('term1-inputs');
+            const term2Inputs = document.getElementById('term2-inputs');
+            const tableHeader = document.getElementById('table-header');
+            
+            term1Inputs.innerHTML = '';
+            term2Inputs.innerHTML = '';
+
+            // 1. Setup Form Inputs
+            SUBJECTS.forEach(subject => {
+                const safeName = sanitizeSubjectName(subject);
+                
+                const inputTemplate = (term) => `
+                    <div>
+                        <label class="text-xs block text-gray-600" for="t${term}-${safeName}">${subject}</label>
+                        <input type="number" id="t${term}-${safeName}" min="0" max="100" required class="w-full p-1 border border-gray-300 rounded-md text-sm" value="${Math.floor(Math.random() * (95 - 70 + 1)) + 70}">
+                    </div>
+                `;
+                term1Inputs.innerHTML += inputTemplate(1);
+                term2Inputs.innerHTML += inputTemplate(2);
+            });
+
+            // 2. Setup Table Header (Simplified for visualization)
+            const marksHeaders = SUBJECTS.map(s => `<th class="px-2 py-3 text-center text-xs font-medium text-gray-600">${s.substring(0, 3)} (T1)</th>`).join('') +
+                                 SUBJECTS.map(s => `<th class="px-2 py-3 text-center text-xs font-medium text-gray-600">${s.substring(0, 3)} (T2)</th>`).join('');
+            
+            tableHeader.innerHTML = `
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky-col">Name</th>
+                <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Grade/Section</th>
+                ${marksHeaders}
+            `;
+        }
+
+        /**
+         * Handles form submission: validates, collects data, and adds to the in-memory list.
+         */
+        function addStudent() {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = "";
+            
+            const form = document.getElementById('studentForm');
+            const name = form.name.value.trim();
+            const grade = parseInt(form.grade.value, 10);
+            const section = form.section.value.trim().toUpperCase();
+
+            // Store marks using the sanitized column names (t1_math, t2_science, etc.)
+            const marks = {};
+            let isValid = true;
+
+            SUBJECTS.forEach(subject => {
+                const safeName = sanitizeSubjectName(subject);
+                
+                const t1Val = parseInt(document.getElementById(`t1-${safeName}`).value, 10);
+                const t2Val = parseInt(document.getElementById(`t2-${safeName}`).value, 10);
+
+                if (isNaN(t1Val) || t1Val < 0 || t1Val > 100 || isNaN(t2Val) || t2Val < 0 || t2Val > 100) {
+                    isValid = false;
+                    return;
+                }
+                
+                marks[`t1_${safeName}`] = t1Val;
+                marks[`t2_${safeName}`] = t2Val;
+            });
+
+            if (!isValid || !name || isNaN(grade) || grade < 1 || grade > 12 || !section) {
+                messageEl.textContent = "❌ Please ensure all fields are valid (marks 0-100).";
+                messageEl.classList.remove('text-green-600');
+                messageEl.classList.add('text-red-500');
+                return;
+            }
+
+            const studentData = { name, grade, section, ...marks };
+            studentRecords.push(studentData);
+            
+            messageEl.textContent = `✅ Record for ${name} added.`;
+            messageEl.classList.remove('text-red-500');
+            messageEl.classList.add('text-green-600');
+            
+            renderStudents();
+            form.name.value = `Student ${studentRecords.length + 1}`;
+        }
+
+        /**
+         * Renders the current list of students in the HTML table.
+         */
+        function renderStudents() {
+            const tableBody = document.getElementById('studentTableBody');
+            const exportBtn = document.getElementById('exportBtn');
+            const recordCount = document.getElementById('recordCount');
+            tableBody.innerHTML = '';
+
+            recordCount.textContent = studentRecords.length;
+            exportBtn.disabled = studentRecords.length === 0;
+
+            if (studentRecords.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="15" class="p-4 text-center text-gray-500">No records added yet.</td></tr>`;
+                return;
+            }
+
+            studentRecords.forEach(student => {
+                let rowHtml = `<tr class="hover:bg-gray-50">`;
+                
+                // Name and Grade/Section
+                rowHtml += `<td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-gray-900 sticky-col">${student.name}</td>`;
+                rowHtml += `<td class="px-3 py-2 whitespace-nowrap text-sm text-center text-gray-600">${student.grade}/${student.section}</td>`;
+                
+                // Marks
+                SUBJECTS.forEach(subject => {
+                    const safeName = sanitizeSubjectName(subject);
+                    rowHtml += `<td class="px-2 py-2 whitespace-nowrap text-sm text-center text-indigo-700 font-medium bg-indigo-50">${student[`t1_${safeName}`]}</td>`;
+                });
+                
+                SUBJECTS.forEach(subject => {
+                    const safeName = sanitizeSubjectName(subject);
+                    rowHtml += `<td class="px-2 py-2 whitespace-nowrap text-sm text-center text-teal-700 font-medium bg-teal-50">${student[`t2_${safeName}`]}</td>`;
+                });
+                
+                rowHtml += `</tr>`;
+                tableBody.innerHTML += rowHtml;
+            });
+        }
+
+        /**
+         * Generates the CSV string and triggers the file download.
+         */
+        window.generateCsv = function() {
+            if (studentRecords.length === 0) {
+                console.warn("No data to export.");
+                return;
+            }
+            
+            // 1. Define Headers (MUST match the Python script's expected columns)
+            let headers = ['name', 'grade', 'section'];
+            SUBJECTS.forEach(s => {
+                const safeName = sanitizeSubjectName(s);
+                headers.push(`t1_${safeName}`);
+            });
+            SUBJECTS.forEach(s => {
+                const safeName = sanitizeSubjectName(s);
+                headers.push(`t2_${safeName}`);
+            });
+
+            let csv = headers.join(',') + '\n';
+
+            // 2. Generate Data Rows
+            studentRecords.forEach(student => {
+                const rowData = [];
+                
+                // Ensure data is pulled in the exact order of the headers
+                headers.forEach(header => {
+                    let value = student[header];
+                    
+                    // Handle string values (name) for CSV safety
+                    if (header === 'name') {
+                        value = `"${String(value).replace(/"/g, '""')}"`;
+                    }
+                    
+                    rowData.push(value);
+                });
+
+                csv += rowData.join(',') + '\n';
+            });
+
+            // 3. Trigger Download
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", "student_records_for_import.csv");
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            console.log("CSV download triggered.");
+        }
+
+        // Initialize setup when the page loads
+        document.addEventListener('DOMContentLoaded', setupFormAndTable);
+        // Add one default record for easy testing
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('name').value = "Alice Johnson";
+            addStudent();
+            document.getElementById('name').value = "Bob Smith";
+            addStudent();
+        });
+
+    </script>
+</body>
+</html>
