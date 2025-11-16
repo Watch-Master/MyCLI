@@ -12,8 +12,8 @@ import re
 # and these 'user' and 'password' values are correct for your local setup.
 DB_CONFIG = {
     'host': 'localhost',
-    'user': 'myserver2py',  # e.g., 'root'
-    'password': 'Myserver@2py', # e.g., 'password123'
+    'user': 'root',  # e.g., 'root'
+    'password': 'password123', # e.g., 'password123'
     'database': 'student_data_db' # Database will be created if it doesn't exist
 }
 
@@ -429,3 +429,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
